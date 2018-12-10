@@ -61,18 +61,11 @@ using namespace std;
 
 		//initial features and featureTemplate mem
 		features = nullptr;
-		featuresTmpl = (Features *)malloc(sizeof(Features));
+		featuresTmpl = nullptr;
 		
 
 
-		featuresTmpl->relativePosL = (FPTYPE *)malloc(sizeof(FPTYPE) * NMAXTHETA * GRIDSIZE * GRIDSIZE * 2);
-		featuresTmpl->relativePosScL = (int *)malloc(sizeof(int) * NMAXTHETA * GRIDSIZE * GRIDSIZE * 2);
-		featuresTmpl->tmpVector = (FPTYPE *)malloc(sizeof(FPTYPE) * (2 * PANGLE + 1) * 4 * 4);
-		featuresTmpl->nx = nx;
-		featuresTmpl->ny = ny;
-		featuresTmpl->nxy = nxy;
-		featuresTmpl->nAngleCoef = nAngleCoef;
-		featuresTmpl->nEstFeature = 0;
+
 
 
 		int  pos, posTheta, order, iTheta, ix, iy;
@@ -169,10 +162,140 @@ using namespace std;
 
 	}
 
+	
+
+	MainProcessGPU::~MainProcessGPU() {
+		int scaleNum = scaleG;
+		int scaleMaxNum = scaleMaxG;
+
+
+		//free gpu
+		free(inImg);
+		deleteGPU4(workiir);
+		free(workiir);
+		for (int i = 0; i < (2 * PANGLE + 1) * 2; i++) {
+			deleteGPU2(workiir2[i]);
+			free(workiir2[i]);
+			cudaStreamDestroy(pStream[i]);
+		}
+		//free(workiir2);
+
+		cudaFree(d_dirHist);
+		cudaFree(diffXImgGPU);
+		cudaFree(diffYImgGPU);
+
+
+		//free hist gpu
+		for (int i = 0; i < KMaxTimes; i++)
+		{
+			cudaFree(histFourS1GPU[i]);
+			cudaFree(histFourS4GPU[i]);
+		}
+		free(histFourS1GPU);
+		free(histFourS4GPU);
+
+
+		//free featuresTmpl
+		if (featuresTmpl != nullptr) {
+			for (int pos = 0; pos < featuresTmpl->nEstFeature; ++pos) {
+				free(featuresTmpl->featureL[pos].vector);
+			}
+			free(featuresTmpl->featureL);
+			free(featuresTmpl->relativePosL);
+			free(featuresTmpl->relativePosScL);
+			free(featuresTmpl->tmpVector);
+			free(featuresTmpl);
+		}
+
+		//free features
+		int temp = 0;
+		if (features !=nullptr) {
+			while (scaleNum <= scaleMaxNum) {
+				for (int pos = 0; pos < features[temp]->nEstFeature; ++pos) {
+					free(features[temp]->featureL[pos].vector);
+				}
+
+				free(features[temp]->featureL);
+				free(features[temp]->relativePosL);
+				free(features[temp]->relativePosScL);
+				free(features[temp]->tmpVector);
+				free(features[temp]);
+
+				scaleNum = (int)scaleNum * scaleRatio;
+				temp++;
+			}
+			free(features);
+		}
+
+		//free workMT
+		free(workMT->invFourTbl);
+		free(workMT->rotTbl);
+		free(workMT->largeScaleATbl);
+		free(workMT->largeScaleRelTbl);
+		free(workMT->largeScaleTbl);
+		free(workMT);
+
+		cudaDeviceReset();
+	}
+
+	void MainProcessGPU::threadFunction(float scale, int KTime) {
+		int pos, step, stX, stY, endX, endY, ix, iy, iFeature;
+		int nMaxTheta;
+		int maxITheta[2];
+
+
+		for (pos = 0; pos < NMAXTHETA * GRIDSIZE * GRIDSIZE * 2; ++pos) {
+			features[KTime]->relativePosScL[pos] = (int)(scale * features[KTime]->relativePosL[pos] + ROUNDFRAC);
+			// printf("relativePosScL[%d] = %d\n", pos, featuresP->relativePosScL[pos]);
+		}
+		/* Process for each sample point */
+		step = (int)(scale * STEPRATIO + ROUNDFRAC);
+
+
+		stX = stY = (int)(1.5 * scale + ROUNDFRAC);
+		endX = xsize - stX; endY = ysize - stY;
+
+
+		for (iy = stY; iy <= endY; iy += step) {
+			for (ix = stX; ix <= endX; ix += step) {
+				// printf("(ix, iy) = (%d, %d)\n", ix, iy);
+				pos = ix + xsize * iy;
+				/* Local direction using first mode */
+
+				nMaxTheta = maxDirection(&(histFourS1GPU[KTime][pos]), workMT, maxITheta);
+
+				/* Rotate and construct feature vectors  */
+				//printf("theta = %f, maxTheta = %f  %d  %f\n", 2.0 * PI * transType / NTEMPLATEROT, 2.0 * PI * maxITheta[0] / NMAXTHETA, nMaxTheta, 2.0 * PI * maxITheta[1] / NMAXTHETA);
+				//printf("%f  %f \n", 2.0 * PI * transType / NTEMPLATEROT, 2.0 * PI * maxITheta[0] / NMAXTHETA);
+				for (iFeature = 0; iFeature < nMaxTheta; ++iFeature) {
+					Feature *feature = &((features[KTime]->featureL)[features[KTime]->nFeature]);
+					feature->ix = ix;
+					feature->iy = iy;
+					feature->iTheta = maxITheta[iFeature];
+					feature->ordHist = iFeature;
+					feature->scale = scale;
+					feature->transType = 0;
+					mkFeature(histFourS4GPU[KTime], workMT, features[KTime], feature);
+					++(features[KTime]->nFeature);
+				}
+			}
+		} /* End of scale loop */
+	}
+
 	void MainProcessGPU::loadFeature(const char* workdir) {
 
+		featuresTmpl = (Features*)malloc(sizeof(Features));
+		int nAngleCoef = 2 * PANGLE + 1;
+		featuresTmpl->relativePosL = (FPTYPE *)malloc(sizeof(FPTYPE) * NMAXTHETA * GRIDSIZE * GRIDSIZE * 2);
+		featuresTmpl->relativePosScL = (int *)malloc(sizeof(int) * NMAXTHETA * GRIDSIZE * GRIDSIZE * 2);
+		featuresTmpl->tmpVector = (FPTYPE *)malloc(sizeof(FPTYPE) * (2 * PANGLE + 1) * 4 * 4);
+		featuresTmpl->nx = xsize;
+		featuresTmpl->ny = ysize;
+		featuresTmpl->nxy = xsize*ysize;
+		featuresTmpl->nAngleCoef = nAngleCoef;
+		featuresTmpl->nEstFeature = 0;
 
-		int temp = 0, pos = 0, nx = xsize, ny = ysize, nAngleCoef = 2 * PANGLE + 1;
+		int temp = 0, pos = 0, nx = xsize, ny = ysize;
 		int nxy = nx * ny;
 		float scale = scaleG;
 		int   posTheta, order, iTheta, ix, iy;
@@ -215,78 +338,6 @@ using namespace std;
 
 
 		loadFeatures(workdir, featuresTmpl);
-	}
-
-	MainProcessGPU::~MainProcessGPU() {
-		int scaleNum = scaleG;
-		int scaleMaxNum = scaleMaxG;
-
-
-		//free gpu
-		free(inImg);
-		deleteGPU4(workiir);
-		free(workiir);
-		for (int i = 0; i < (2 * PANGLE + 1) * 2; i++) {
-			deleteGPU2(workiir2[i]);
-			free(workiir2[i]);
-			cudaStreamDestroy(pStream[i]);
-		}
-		//free(workiir2);
-
-		cudaFree(d_dirHist);
-		cudaFree(diffXImgGPU);
-		cudaFree(diffYImgGPU);
-
-
-		//free hist gpu
-		for (int i = 0; i < KMaxTimes; i++)
-		{
-			cudaFree(histFourS1GPU[i]);
-			cudaFree(histFourS4GPU[i]);
-		}
-		free(histFourS1GPU);
-		free(histFourS4GPU);
-
-
-		//free featuresTmpl
-		for (int pos = 0; pos < featuresTmpl->nEstFeature; ++pos) {
-			free(featuresTmpl->featureL[pos].vector);
-		}
-		free(featuresTmpl->featureL);
-		free(featuresTmpl->relativePosL);
-		free(featuresTmpl->relativePosScL);
-		free(featuresTmpl->tmpVector);
-		free(featuresTmpl);
-
-		//free features
-		int temp = 0;
-		if (features !=nullptr) {
-			while (scaleNum <= scaleMaxNum) {
-				for (int pos = 0; pos < features[temp]->nEstFeature; ++pos) {
-					free(features[temp]->featureL[pos].vector);
-				}
-
-				free(features[temp]->featureL);
-				free(features[temp]->relativePosL);
-				free(features[temp]->relativePosScL);
-				free(features[temp]->tmpVector);
-				free(features[temp]);
-
-				scaleNum = (int)scaleNum * scaleRatio;
-				temp++;
-			}
-			free(features);
-		}
-
-		//free workMT
-		free(workMT->invFourTbl);
-		free(workMT->rotTbl);
-		free(workMT->largeScaleATbl);
-		free(workMT->largeScaleRelTbl);
-		free(workMT->largeScaleTbl);
-		free(workMT);
-
-		cudaDeviceReset();
 	}
 
 	void MainProcessGPU::calPoint(float *inImg, int *out) {
@@ -378,14 +429,25 @@ using namespace std;
 	}
 
 
-	void MainProcessGPU::savePoint(float *inImg,const char *fileName) {
-
-		featuresTmpl->nEstFeature = KMaxTimes;
-		featuresTmpl->nFeature = 0;
-		featuresTmpl->featureL = (Feature *)malloc(sizeof(Feature) * featuresTmpl->nEstFeature);
-		for (int pos = 0; pos < featuresTmpl->nEstFeature; ++pos) {
-			featuresTmpl->featureL[pos].vector = (FPTYPE *)malloc(sizeof(FPTYPE) * (2 * PANGLE + 1) * GRIDSIZE * GRIDSIZE);
+	void MainProcessGPU::savePoint(float *inImg) {
+		
+		
+		Features tmplFeatures;
+		int nAngleCoef = 2 * PANGLE + 1;
+		tmplFeatures.relativePosL = (FPTYPE *)malloc(sizeof(FPTYPE) * NMAXTHETA * GRIDSIZE * GRIDSIZE * 2);
+		tmplFeatures.relativePosScL = (int *)malloc(sizeof(int) * NMAXTHETA * GRIDSIZE * GRIDSIZE * 2);
+		tmplFeatures.tmpVector = (FPTYPE *)malloc(sizeof(FPTYPE) * (2 * PANGLE + 1) * 4 * 4);
+		tmplFeatures.nx = xsize;
+		tmplFeatures.ny = ysize;
+		tmplFeatures.nxy = xsize * ysize;
+		tmplFeatures.nAngleCoef = nAngleCoef;
+		tmplFeatures.nEstFeature = KMaxTimes;
+		tmplFeatures.nFeature = 0;
+		tmplFeatures.featureL = (Feature *)malloc(sizeof(Feature) * tmplFeatures.nEstFeature);
+		for (int pos = 0; pos < tmplFeatures.nEstFeature; ++pos) {
+			tmplFeatures.featureL[pos].vector = (FPTYPE *)malloc(sizeof(FPTYPE) * (2 * PANGLE + 1) * GRIDSIZE * GRIDSIZE);
 		}
+
 		
 		
 		for (int i = 0; i < 1; i++) {
@@ -398,8 +460,8 @@ using namespace std;
 				for (int iy = 0; iy < GRIDSIZE; ++iy) {
 					x = -(GRIDSIZE - 1.0) / GRIDSIZE;
 					for (int ix = 0; ix < GRIDSIZE; ++ix) {
-						featuresTmpl->relativePosL[position] = x * cosTheta - y * sinTheta; ++position;// x
-						featuresTmpl->relativePosL[position] = x * sinTheta + y * cosTheta; ++position;// y
+						tmplFeatures.relativePosL[position] = x * cosTheta - y * sinTheta; ++position;// x
+						tmplFeatures.relativePosL[position] = x * sinTheta + y * cosTheta; ++position;// y
 						x = x + 2.0 / GRIDSIZE;
 					}
 					y = y + 2.0 / GRIDSIZE;
@@ -447,7 +509,7 @@ using namespace std;
 
 
 			for (pos = 0; pos < NMAXTHETA * GRIDSIZE * GRIDSIZE * 2; ++pos) {
-				featuresTmpl->relativePosScL[pos] = (int)(scale * featuresTmpl->relativePosL[pos] + ROUNDFRAC);
+				tmplFeatures.relativePosScL[pos] = (int)(scale * tmplFeatures.relativePosL[pos] + ROUNDFRAC);
 				// printf("relativePosScL[%d] = %d\n", pos, featuresP->relativePosScL[pos]);
 			}
 
@@ -457,72 +519,65 @@ using namespace std;
 
 			nMaxTheta = maxDirection(&(histFourS1GPU[kTimes][pos]), workMT, maxITheta);
 
-			/* Rotate and construct feature vectors  */
-			//printf("theta = %f, maxTheta = %f  %d  %f\n", 2.0 * PI * transType / NTEMPLATEROT, 2.0 * PI * maxITheta[0] / NMAXTHETA, nMaxTheta, 2.0 * PI * maxITheta[1] / NMAXTHETA);
-			//printf("%f  %f \n", 2.0 * PI * transType / NTEMPLATEROT, 2.0 * PI * maxITheta[0] / NMAXTHETA);
-					
-			Feature *feature = &((featuresTmpl->featureL)[featuresTmpl->nFeature]);
+			Feature *feature = &((tmplFeatures.featureL)[tmplFeatures.nFeature]);
 			feature->ix = stx;
 			feature->iy = sty;
 			feature->iTheta = maxITheta[iFeature];
 			feature->ordHist = iFeature;
 			feature->scale = scale;
-			feature->transType = 0;
-			mkFeature(histFourS4GPU[kTimes], workMT, featuresTmpl, feature);
-			++(featuresTmpl->nFeature);
+			feature->transType = this->transType;
+			mkFeature(histFourS4GPU[kTimes], workMT, &tmplFeatures, feature);
+			++(tmplFeatures.nFeature);
 					
 			scale *= scaleRatio;
 			kTimes++;
 
 		}/* End of transformation loop */
 
-		saveFeatures(fileName, featuresTmpl);
+		tmplList.push_back(tmplFeatures);
+		this->transType++;
 
 	}
 
-	void MainProcessGPU::threadFunction(float scale, int KTime) {
-		int pos, step, stX, stY, endX, endY, ix, iy, iFeature;
-		int nMaxTheta;
-		int maxITheta[2];
-
-
-		for (pos = 0; pos < NMAXTHETA * GRIDSIZE * GRIDSIZE * 2; ++pos) {
-			features[KTime]->relativePosScL[pos] = (int)(scale * features[KTime]->relativePosL[pos] + ROUNDFRAC);
-			// printf("relativePosScL[%d] = %d\n", pos, featuresP->relativePosScL[pos]);
+	void MainProcessGPU::saveFeatures(const char * fileName)
+	{
+		int nFeature = 0;
+		for (int i = 0; i < tmplList.size();i++) {
+			nFeature += tmplList[i].nFeature;
 		}
-		/* Process for each sample point */
-		step = (int)(scale * STEPRATIO + ROUNDFRAC);
+		Feature *feature;
+		FILE *fp; /* File pointer */
+		fp = fopen(fileName, "wb");
+		if (fp == NULL) {
+			throw FileNotFound;
+		}
+
+		fwrite(&(tmplList[0].nx), sizeof(int), 1, fp);
+		fwrite(&(tmplList[0].ny), sizeof(int), 1, fp);
+		fwrite(&nFeature, sizeof(int), 1, fp);
+		fwrite(&(tmplList[0].nAngleCoef), sizeof(int), 1, fp);
 
 
-		stX = stY = (int)(1.5 * scale + ROUNDFRAC);
-		endX = xsize - stX; endY = ysize - stY;
-
-
-		for (iy = stY; iy <= endY; iy += step) {
-			for (ix = stX; ix <= endX; ix += step) {
-				// printf("(ix, iy) = (%d, %d)\n", ix, iy);
-				pos = ix + xsize * iy;
-				/* Local direction using first mode */
-
-				nMaxTheta = maxDirection(&(histFourS1GPU[KTime][pos]), workMT, maxITheta);
-
-				/* Rotate and construct feature vectors  */
-				//printf("theta = %f, maxTheta = %f  %d  %f\n", 2.0 * PI * transType / NTEMPLATEROT, 2.0 * PI * maxITheta[0] / NMAXTHETA, nMaxTheta, 2.0 * PI * maxITheta[1] / NMAXTHETA);
-				//printf("%f  %f \n", 2.0 * PI * transType / NTEMPLATEROT, 2.0 * PI * maxITheta[0] / NMAXTHETA);
-				for (iFeature = 0; iFeature < nMaxTheta; ++iFeature) {
-					Feature *feature = &((features[KTime]->featureL)[features[KTime]->nFeature]);
-					feature->ix = ix;
-					feature->iy = iy;
-					feature->iTheta = maxITheta[iFeature];
-					feature->ordHist = iFeature;
-					feature->scale = scale;
-					feature->transType = 0;
-					mkFeature(histFourS4GPU[KTime], workMT, features[KTime], feature);
-					++(features[KTime]->nFeature);
-				}
+		for (int i = 0; i < tmplList.size(); i++) {
+			for (int pos = 0; pos < tmplList[i].nFeature; ++pos) {
+				feature = &(tmplList[i].featureL[pos]);
+				fwrite(&(feature->ix), sizeof(int), 1, fp);
+				fwrite(&(feature->iy), sizeof(int), 1, fp);
+				fwrite(&(feature->ordHist), sizeof(int), 1, fp);
+				fwrite(&(feature->iTheta), sizeof(int), 1, fp);
+				fwrite(&(feature->scale), sizeof(float), 1, fp);
+				fwrite(&(feature->transType), sizeof(int), 1, fp);
+				fwrite(feature->vector, sizeof(float), (2 * PANGLE + 1) * GRIDSIZE * GRIDSIZE, fp);
 			}
-		} /* End of scale loop */
+
+		}
+
+		fclose(fp);
 	}
+
+
+
+
 
 
 

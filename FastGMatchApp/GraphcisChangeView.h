@@ -15,7 +15,7 @@ class GraphcisChangeView : public QMainWindow
 
 public:
 	GraphcisChangeView( QWidget *parent = Q_NULLPTR);
-	void showImage(QList<cv::Mat> qlistMat,QList<int> scaleList);
+	void showImage(QList<cv::Mat>& qlistMat,QList<int> scaleList);
 	~GraphcisChangeView();
 
 private:

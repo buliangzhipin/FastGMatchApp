@@ -28,45 +28,63 @@
       <Extensions>moc;h;cpp</Extensions>
       <SourceControlFiles>False</SourceControlFiles>
     </Filter>
+    <Filter Include="Source Files\GUI">
+      <UniqueIdentifier>{5ae081ee-3034-4557-9e0b-f3634ba42287}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="Source Files\Thread">
+      <UniqueIdentifier>{9297f3da-8911-40e7-8830-2dfc1fc71137}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="Source Files\kernel">
+      <UniqueIdentifier>{a7cb5244-496d-41f4-aa7d-b51b4f6ad92f}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="Header Files\GUI">
+      <UniqueIdentifier>{eaed477c-294e-40d2-a951-b24703a97237}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="Header Files\kernel">
+      <UniqueIdentifier>{5841049d-59c2-4166-8dab-1b880569559b}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="Header Files\Thread">
+      <UniqueIdentifier>{93aa3cc0-2903-440c-9c20-9e0e718e16e7}</UniqueIdentifier>
+    </Filter>
   </ItemGroup>
   <ItemGroup>
     <ClCompile Include="main.cpp">
       <Filter>Source Files</Filter>
     </ClCompile>
     <ClCompile Include="FastGMatchApp.cpp">
-      <Filter>Source Files</Filter>
-    </ClCompile>
-    <ClCompile Include="utilities.cpp">
-      <Filter>Source Files</Filter>
-    </ClCompile>
-    <ClCompile Include="mainProcessGPU.cpp">
-      <Filter>Source Files</Filter>
-    </ClCompile>
-    <ClCompile Include="MatchThread.cpp">
-      <Filter>Source Files</Filter>
-    </ClCompile>
-    <ClCompile Include="MakeThread.cpp">
-      <Filter>Source Files</Filter>
-    </ClCompile>
-    <ClCompile Include="GraphicsProcess.cpp">
-      <Filter>Source Files</Filter>
+      <Filter>Source Files\GUI</Filter>
     </ClCompile>
     <ClCompile Include="GraphcisChangeView.cpp">
-      <Filter>Source Files</Filter>
+      <Filter>Source Files\GUI</Filter>
+    </ClCompile>
+    <ClCompile Include="MakeThread.cpp">
+      <Filter>Source Files\Thread</Filter>
+    </ClCompile>
+    <ClCompile Include="MatchThread.cpp">
+      <Filter>Source Files\Thread</Filter>
+    </ClCompile>
+    <ClCompile Include="GraphicsProcess.cpp">
+      <Filter>Source Files\kernel</Filter>
+    </ClCompile>
+    <ClCompile Include="mainProcessGPU.cpp">
+      <Filter>Source Files\kernel</Filter>
+    </ClCompile>
+    <ClCompile Include="utilities.cpp">
+      <Filter>Source Files\kernel</Filter>
     </ClCompile>
   </ItemGroup>
   <ItemGroup>
     <QtMoc Include="FastGMatchApp.h">
-      <Filter>Header Files</Filter>
-    </QtMoc>
-    <QtMoc Include="MatchThread.h">
-      <Filter>Header Files</Filter>
-    </QtMoc>
-    <QtMoc Include="MakeThread.h">
-      <Filter>Header Files</Filter>
+      <Filter>Header Files\GUI</Filter>
     </QtMoc>
     <QtMoc Include="GraphcisChangeView.h">
-      <Filter>Header Files</Filter>
+      <Filter>Header Files\GUI</Filter>
+    </QtMoc>
+    <QtMoc Include="MakeThread.h">
+      <Filter>Header Files\Thread</Filter>
+    </QtMoc>
+    <QtMoc Include="MatchThread.h">
+      <Filter>Header Files\Thread</Filter>
     </QtMoc>
   </ItemGroup>
   <ItemGroup>
@@ -83,23 +101,25 @@
     </QtRcc>
   </ItemGroup>
   <ItemGroup>
-    <CudaCompile Include="kernel.cu" />
-  </ItemGroup>
-  <ItemGroup>
-    <ClInclude Include="utilities.h">
-      <Filter>Header Files</Filter>
-    </ClInclude>
-    <ClInclude Include="kernel.cuh">
-      <Filter>Header Files</Filter>
-    </ClInclude>
-    <ClInclude Include="mainProcessGPU.h">
-      <Filter>Header Files</Filter>
-    </ClInclude>
     <ClInclude Include="EnumOfApp.h">
       <Filter>Header Files</Filter>
     </ClInclude>
-    <ClInclude Include="GraphicsProcess.h">
-      <Filter>Header Files</Filter>
+    <ClInclude Include="kernel.cuh">
+      <Filter>Header Files\kernel</Filter>
     </ClInclude>
+    <ClInclude Include="mainProcessGPU.h">
+      <Filter>Header Files\kernel</Filter>
+    </ClInclude>
+    <ClInclude Include="GraphicsProcess.h">
+      <Filter>Header Files\kernel</Filter>
+    </ClInclude>
+    <ClInclude Include="utilities.h">
+      <Filter>Header Files\kernel</Filter>
+    </ClInclude>
+  </ItemGroup>
+  <ItemGroup>
+    <CudaCompile Include="kernel.cu">
+      <Filter>Source Files\kernel</Filter>
+    </CudaCompile>
   </ItemGroup>
 </Project>

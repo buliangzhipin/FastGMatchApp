@@ -5,10 +5,9 @@
 #endif
 
 #include "FastGMatchApp.h"
-
-
-
 #include <qfiledialog.h>
+#include <qpushbutton.h>
+#include <qslider.h>
 #include <qmessagebox.h>
 #include "utilities.h"
 #include <qthread.h>
@@ -79,14 +78,7 @@ void FastGMatchApp::changeScaleValue(int value) {
 		}
 	}
 	lcdGroup[objectNumber]->display(scaleGroup[objectNumber]);
-	makeScaleList.clear();
-	int scale = sliderGroup[0]->value();
-	int scaleMax = sliderGroup[1]->value();
-	while (scale<=scaleMax)
-	{
-		makeScaleList.append(scale);
-		scale = scale * makeScaleRatio;
-	}
+
 }
 
 
@@ -121,6 +113,7 @@ void FastGMatchApp::startGMakeGPU() {
 	mkThread->fileName = fileName;
 	mkThread->scale = scaleGroup[0];
 	mkThread->scaleMax = scaleGroup[1];
+	mkThread->grayImgList = this->qlistMat;
 	qmtThread[1]->start();
 	qmtThread[1]->quit();
 	qmtThread[1]->wait();
@@ -182,6 +175,14 @@ void FastGMatchApp::dealErrorMessage(QString title, QString message) {
 void FastGMatchApp::loadChangedImage()
 {
 	if (!qlistMat.isEmpty()) {
+		makeScaleList.clear();
+		int scale = sliderGroup[0]->value();
+		int scaleMax = sliderGroup[1]->value();
+		while (scale <= scaleMax)
+		{
+			makeScaleList.append(scale);
+			scale = scale * makeScaleRatio;
+		}
 		gcv->showImage(qlistMat,makeScaleList);
 		gcv->show();
 	}

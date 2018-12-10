@@ -19,6 +19,7 @@ public:
 	int scale;
 	int scaleMax;
 	cv::Mat *grayimg;
+	QList<cv::Mat> grayImgList;
 
 
 public slots:

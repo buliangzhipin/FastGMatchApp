@@ -20,10 +20,13 @@ MakeThread::~MakeThread()
 void MakeThread::makeImage() {
 	QByteArray str_arr = fileName.toLocal8Bit();
 	const char* c_str = str_arr.constData();
-
-	cv::Mat grayF;
-	grayimg->convertTo(grayF, CV_32F);
 	MainProcessGPU mpg(grayimg->cols, grayimg->rows, scale, scaleMax, 1.414);
-	mpg.savePoint((float*)grayF.data, c_str);
 
+	for (int i = 0; i < grayImgList.size();i++) {
+		cv::Mat grayF;
+		grayImgList[i].convertTo(grayF, CV_32F);
+		mpg.savePoint((float*)grayF.data);
+	}
+
+	mpg.saveFeatures(c_str);
 }
